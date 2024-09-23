@@ -19,6 +19,23 @@
 	import modal from '../../stores/app/modal'
 	import { click_to_copy } from '$lib/utilities'
 
+	// import { simpleGit, CleanOptions } from 'simple-git';
+
+	// simpleGit().clean(CleanOptions.FORCE);
+
+	async function deploy() {
+	// 	console.log($site);
+	// 	const git = simpleGit();
+
+	// // chain together tasks to await final result
+	// // await git.init().addRemote('origin', '...remote.git');
+
+	// // or await each step individually
+	// await git.init();
+	// await git.addRemote('origin', '...remote.git');
+	}
+
+
 	const page_field_button = {
 		id: 'toolbar--page',
 		title: 'Page',

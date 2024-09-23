@@ -22,55 +22,16 @@
 	import PrimaryButton from '$lib/ui/PrimaryButton.svelte'
 	import { dataChanged } from '$lib/database'
 
-	let stage = 'INITIAL'
-
-	if ($active_deployment) {
-		stage = 'ACTIVE'
-	}
-
-	let fetched_git_account = false
-
-	let github_account = $site.active_deployment?.repo?.owner
-	if (!github_account) {
-		axios
-			.get(`/api/deploy/user?provider=github`)
-			.then(({ data }) => {
-				if (data) {
-					github_account = data
-					fetched_git_account = true
-				}
-			})
-			.catch((e) => {
-				console.error({ e })
-				fetched_git_account = true
-			})
-	} else {
-		fetched_git_account = true
-	}
-
-	let gitlab_account = $site.active_deployment?.repo?.owner
-	if (!gitlab_account) {
-		axios
-			.get(`/api/deploy/user?provider=gitlab`)
-			.then(({ data }) => {
-				if (data) {
-					gitlab_account = data
-					fetched_git_account = true
-				}
-			})
-			.catch((e) => {
-				console.error({ e })
-				fetched_git_account = true
-			})
-	}
-
 	async function download_site() {
-		loading = true
+		downloading = true
 		const files = await build_site_bundle({ pages: $pages, symbols: $symbols })
 		if (!files) {
-			loading = false
+			downloading = false
 			return
 		}
+		
+		/////////////////////////////
+
 		const bundle = await create_site_zip(files)
 		saveFile(bundle, `${$site.name}.zip`)
 		modal.hide()
@@ -82,331 +43,70 @@
 			})
 			return await zip.generateAsync({ type: 'blob' })
 		}
+		downloading = false;
 	}
 
-	/**
-	 * @param {Event} e
-	 * @param {'github' | 'gitlab'} provider
-	 * @returns {Promise<void>}
-	 */
-	async function connect_git(e, provider) {
-		const user_token = e.target[0]['value']
-
-		let user_data
-		if (provider === 'github') {
-			const res = await axios.get(`https://api.github.com/user`, {
-				headers: { Authorization: `Bearer ${user_token}`, Accept: 'application/vnd.github.v3+json' }
+	async function publish_site() {
+		publishing = true
+		const files = await build_site_bundle({ pages: $pages, symbols: $symbols })
+		if (!files) {
+			publishing = false
+			return
+		}
+		
+		console.log(files);
+		console.log($site);
+		await fetch('/push', {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				site: $site,
+				files
 			})
-			user_data = res.data
-			github_account = res.data
-		} else if (provider === 'gitlab') {
-			const res = await axios.get(`https://gitlab.com/api/v4/user`, {
-				headers: { Authorization: `Bearer ${user_token}` }
-			})
-			user_data = res.data
-			gitlab_account = res.data
-		}
-
-		if (user_data) {
-			stage = `DEPLOY--${provider}`
-			await dataChanged({
-				table: 'config',
-				action: 'upsert',
-				id: `${provider}_token`,
-				data: { id: `${provider}_token`, value: user_token, options: { user: user_data } }
-			})
-		}
+		});
+		publishing = false;
+		return;
 	}
 
-	/**
-	 * @param {{
-	 *   name: string,
-	 *   provider: 'github' | 'gitlab',
-	 *   create_repo: boolean
-	 * }}
-	 * @returns {Promise<void>}
-	 */
-	async function deploy_to_repo({ name, provider, create_repo = false }) {
-		loading = true
-		const deployment = await push_site({ repo_name: name, provider }, create_repo)
-		if (deployment) {
-			$active_deployment = deployment
-			stage = 'ACTIVE__DEPLOYED'
-		} else {
-			alert('Could not deploy to repo')
-		}
-		loading = false
-	}
 
-	async function get_repos(provider) {
-		const { data } = await axios.get(`/api/deploy/repos?provider=${provider}`)
-		return data
-	}
-
-	const Title = (stage) => {
-		const titles = {
-			INITIAL: 'Deploy Site',
-			'DEPLOY--github': 'Deploy to Github Repo',
-			'DEPLOY--gitlab': 'Deploy to Gitlab Repo',
-			'AUTHENTICATE--github': 'Authenticate GitHub Account',
-			'AUTHENTICATE--gitlab': 'Authenticate GitLab Account',
-			ACTIVE: 'Deploy to Repo'
-		}
-
-		const proxy = new Proxy(titles, {
-			get(target, prop, receiver) {
-				const [key, title] = Object.entries(target).find(([key]) => prop.startsWith(key))
-				return title
-			}
-		})
-
-		return proxy[stage]
-	}
-
-	let loading = false
+	let downloading = false;
+	let publishing = false;
 </script>
 
 <div class="Deploy primo-reset">
 	<header>
 		<h2>
 			<Icon icon="ic:sharp-publish" />
-			<span>{Title(stage)}</span>
+			<span>Deploy Site</span>
 		</h2>
 		<button on:click={() => modal.hide()}>
 			<Icon icon="ic:baseline-close" />
 		</button>
 	</header>
-	{#if stage === 'INITIAL'}
-		<div class="container">
-			<p class="description">
-				To publish your website, you'll need to upload it to a web host. You can either <a
-					href="https://docs.primocms.org/publishing"
-				>
-					manually upload
-				</a>
-				your site, or
-				<a href="https://docs.primocms.org/publishing">deploy it from a Github repo.</a>
-			</p>
-			<div class="buttons">
-				<button class="primo-button" on:click={download_site}>
-					<Icon icon={loading ? 'eos-icons:loading' : 'ic:baseline-download'} />
-					<span>Download</span>
-				</button>
+	<div class="container">
+		<p class="description">
+			To publish your website, you'll need to upload it to a web host. You can either <a
+				href="https://docs.primocms.org/publishing"
+			>
+				manually upload
+			</a>
+			your site, or
+			<a href="https://docs.primocms.org/publishing">deploy it from a Github repo.</a>
+		</p>
+		<div class="buttons">
+			<button class="primo-button" on:click={download_site}>
+				<Icon icon={downloading ? 'eos-icons:loading' : 'ic:baseline-download'} />
+				<span>Download</span>
+			</button>
 
-				{#if !fetched_git_account}
-					<Icon icon="line-md:loading-twotone-loop" />
-				{:else if !github_account && !gitlab_account}
-					<DropdownButton
-						primary_button={{
-							icon: 'mdi:github',
-							label: 'Connect Github',
-							onclick: () => (stage = 'AUTHENTICATE--github')
-						}}
-						buttons={[
-							{
-								icon: 'mdi:gitlab',
-								label: 'Connect Gitlab',
-								onclick: () => (stage = 'AUTHENTICATE--gitlab')
-							}
-						]}
-					/>
-				{:else if github_account && !gitlab_account}
-					<DropdownButton
-						primary_button={{
-							icon: 'mdi:github',
-							label: 'Deploy to Github',
-							onclick: () => (stage = 'DEPLOY--github')
-						}}
-						buttons={[
-							{
-								icon: 'mdi:gitlab',
-								label: 'Connect Gitlab',
-								onclick: () => (stage = 'DEPLOY--gitlab')
-							}
-						]}
-					/>
-				{:else if !github_account && gitlab_account}
-					<DropdownButton
-						primary_button={{
-							icon: 'mdi:gitlab',
-							label: 'Deploy to Gitlab',
-							onclick: () => (stage = 'DEPLOY--gitlab')
-						}}
-						buttons={[
-							{
-								icon: 'mdi:github',
-								label: 'Connect Github',
-								onclick: () => (stage = 'AUTHENTICATE--github')
-							}
-						]}
-					/>
-				{:else if github_account && gitlab_account}
-					<DropdownButton
-						primary_button={{
-							icon: 'mdi:github',
-							label: 'Deploy to Github',
-							onclick: () => (stage = 'DEPLOY--github')
-						}}
-						buttons={[
-							{
-								icon: 'mdi:gitlab',
-								label: 'Deploy to Gitlab',
-								onclick: () => (stage = 'DEPLOY--gitlab')
-							}
-						]}
-					/>
-				{/if}
-			</div>
+			<button class="primo-button" on:click={publish_site}>
+				<Icon icon={publishing ? 'eos-icons:loading' : 'ic:baseline-publish'} />
+				<span>Publish</span>
+			</button>
 		</div>
-	{:else if stage.startsWith('AUTHENTICATE')}
-		{@const provider = stage.split('--')[1]}
-		<div class="container">
-			<p>
-				Enter your <span style="text-decoration: capitalize">{provider}</span>
-				API token to deploy sites to your account. See the
-				<a target="blank" href="https://docs.primocms.org/publishing">docs</a>
-				for more details.
-			</p>
-			<div>
-				<div style="display: flex; justify-content: space-between">
-					<p>Enter API Token</p>
-					<button class="primo-link" on:click={() => (stage = 'INITIAL')}>change provider</button>
-				</div>
-				<form on:submit|preventDefault={(e) => connect_git(e, provider)}>
-					<div>
-						<TextInput placeholder="Token" />
-						<button class="primo-button">Connect</button>
-					</div>
-				</form>
-			</div>
-		</div>
-	{:else if stage.startsWith('DEPLOY')}
-		{@const provider = stage.split('--')[1]}
-		{@const provider_user = {
-			github: {
-				avatar: github_account?.avatar_url,
-				username: github_account?.login
-			},
-			gitlab: {
-				avatar: gitlab_account?.avatar_url,
-				username: gitlab_account?.username
-			}
-		}[provider]}
-		<div class="container">
-			<div class="account-card">
-				<div class="user">
-					<img src={provider_user?.avatar} alt="{provider} avatar" />
-					<span>{provider_user?.username}</span>
-				</div>
-				<button class="primo-link" on:click={() => (stage = `AUTHENTICATE--${provider}`)}>
-					change
-				</button>
-			</div>
-			{#if stage === `DEPLOY--${provider}`}
-				<div class="buttons">
-					<!-- <button class="primo-button" on:click={download_site}>
-						<Icon icon="ic:baseline-download" />
-					</button> -->
-					<button class="primo-button" on:click={() => (stage = stage += '--USE_EXISTING')}>
-						Use existing repo
-					</button>
-					<button class="primo-button primary" on:click={() => (stage = stage += '--CREATE_REPO')}>
-						Create new repo
-					</button>
-				</div>
-			{:else if stage.includes('USE_EXISTING')}
-				<div class="create-repo">
-					<header>
-						<h3>Deploy to existing repo</h3>
-						<button on:click={() => (stage = `DEPLOY--${provider}--CREATE_REPO`)}>
-							create new repo instead
-						</button>
-					</header>
-					<form
-						on:submit|preventDefault={({ target }) => {
-							deploy_to_repo({
-								name: target[0]['value'],
-								provider
-							})
-						}}
-					>
-						<p class="form-label">Select repo</p>
-						<div>
-							{#await get_repos(provider)}
-								<Spinner />
-							{:then repos}
-								<Select options={repos} />
-							{/await}
-							<PrimaryButton type="submit" label="Deploy" {loading} />
-						</div>
-					</form>
-					<footer>On deployment, your site will overwrite the contents of the repo</footer>
-				</div>
-			{:else if stage.includes('CREATE_REPO')}
-				<div class="create-repo">
-					<header>
-						<h3>Create new repo</h3>
-						<button on:click={() => (stage = `DEPLOY--${provider}--USE_EXISTING`)}>
-							use existing repo instead
-						</button>
-					</header>
-					<form
-						on:submit|preventDefault={({ target }) => {
-							deploy_to_repo({
-								name: `${provider_user.username}/${target[0]['value']}`,
-								create_repo: true,
-								provider
-							})
-						}}
-					>
-						<p class="form-label">Enter repo name</p>
-						<div>
-							<TextInput placeholder="Site" />
-							<button class="primo-button primary" disabled={loading}>
-								{#if loading}
-									<Icon icon="eos-icons:loading" />
-								{:else}
-									<span>Deploy</span>
-								{/if}
-							</button>
-						</div>
-					</form>
-					<footer>This repo will be created in your account</footer>
-				</div>
-			{/if}
-		</div>
-	{:else if stage.startsWith('ACTIVE')}
-		{@const provider = $active_deployment.repo.html_url ? 'github' : 'gitlab'}
-		<!-- temporary, set provider in active deployment later -->
-		<div class="repo-card">
-			<div>
-				<a
-					class="name"
-					href={$active_deployment.repo.html_url || $active_deployment.repo.web_url}
-					target="_blank"
-				>
-					{$active_deployment.repo.full_name}
-				</a>
-				<span class="last-updated">
-					{format($active_deployment.created)}
-				</span>
-			</div>
-			<button class="primo-link" on:click={() => (stage = `DEPLOY--${provider}`)}>edit</button>
-		</div>
-		{#if stage !== 'ACTIVE__DEPLOYED'}
-			<div class="buttons">
-				<PrimaryButton
-					label="Deploy"
-					{loading}
-					on:click={() =>
-						deploy_to_repo({
-							name: $active_deployment.repo.full_name,
-							provider
-						})}
-				/>
-			</div>
-		{/if}
-	{/if}
+	</div>
 </div>
 
 <style lang="postcss">

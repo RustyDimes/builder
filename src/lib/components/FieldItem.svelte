@@ -107,6 +107,8 @@
 			return typeof field_value === 'number'
 		} else if (type === 'switch') {
 			return typeof field_value === 'boolean'
+		} else if (type === 'color') { // color!
+			return typeof field_value === 'string'
 		} else {
 			console.warn('Unhandled field type', type, field_value)
 			return true

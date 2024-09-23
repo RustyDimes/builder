@@ -9,7 +9,7 @@ import Select from './Select.svelte'
 import RepeaterField from './RepeaterField.svelte'
 import GroupField from './GroupField.svelte'
 import ContentField from './ContentField.svelte'
-// import ColorPicker from './ColorPicker.svelte'
+import ColorPicker from './ColorPicker.svelte'
 import IconPicker from './IconPicker.svelte'
 
 export default [
@@ -72,10 +72,10 @@ export default [
 		id: 'info',
 		label: 'Info',
 		component: Information
+	},
+	{
+	  id: 'color',
+	  label: 'Color Picker',
+	  component: ColorPicker
 	}
-	// {
-	//   id: 'color',
-	//   label: 'Color Picker',
-	//   component: ColorPicker
-	// }
 ]
